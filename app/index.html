@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlashGuard — Cross-Chain Stop-Loss in ~1 Second</title>
+<style>
+  :root { --bg:#0b0f17; --card:#121a26; --border:#223047; --text:#e6edf3; --muted:#8b98a9; --accent:#58d68d; --warn:#f0b429; --bad:#f26d6d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:32px 20px 8px; max-width:960px; margin:0 auto; }
+  h1 { margin:0 0 8px; font-size:28px; }
+  h1 span { color:var(--accent); }
+  p.sub { color:var(--muted); margin:0 0 16px; line-height:1.5; }
+  .flow { display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; max-width:960px; margin:16px auto; padding:0 20px; }
+  .step { flex:1 1 200px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .step h3 { margin:0 0 6px; font-size:15px; }
+  .step p { margin:0; color:var(--muted); font-size:13px; line-height:1.5; }
+  .step .chain { display:inline-block; margin-top:8px; font-size:11px; background:#1c2a3d; padding:3px 8px; border-radius:99px; color:#9fd8ff; }
+  .arrow { align-self:center; color:var(--muted); font-size:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; max-width:960px; margin:8px auto; padding:0 20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  .card .value { font-size:26px; font-weight:700; margin-top:6px; }
+  .card .value.small { font-size:16px; word-break:break-all; }
+  .card .note { color:var(--muted); font-size:12px; margin-top:6px; line-height:1.5; }
+  .big { color:var(--accent); }
+  section { max-width:960px; margin:24px auto; padding:0 20px; }
+  section h2 { font-size:18px; margin:0 0 8px; }
+  section p, section li { color:var(--muted); font-size:14px; line-height:1.6; }
+  code { background:#1c2a3d; padding:2px 6px; border-radius:6px; color:#c9f2d4; font-size:12px; word-break:break-all; }
+  .addr-form { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .addr-form input { flex:1 1 240px; background:#0f1722; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:10px; font-size:13px; }
+  button { background:var(--accent); color:#062312; border:0; border-radius:8px; padding:10px 18px; font-weight:700; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  #status { font-size:13px; color:var(--warn); margin-top:10px; }
+  footer { max-width:960px; margin:32px auto; padding:0 20px 32px; color:var(--muted); font-size:12px; line-height:1.6; }
+  a { color:#9fd8ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ FlashGuard <span>— cross-chain stop-loss that fires in ~1 second</span></h1>
+  <p class="sub">A price event on <b>Unichain Sepolia</b> is watched by a reactive contract on <b>Reactive Lasna</b>.
+  The moment a stop-loss threshold breaks, it fires a callback to the <b>ProtectedVault on Base Sepolia</b>,
+  which exits the position into stablecoins. No bot. No keeper. The reaction is on-chain.
+  Built for the Reactive Omni Buildathon — track <i>Every Second Counts</i>.</p>
+</header>
+
+<div class="flow">
+  <div class="step"><h3>1 · Price event</h3><p>PriceFeed posts prices and emits <code>PriceUpdated</code> on every move.</p><span class="chain">Unichain Sepolia · 1301</span></div>
+  <div class="arrow">→</div>
+  <div class="step"><h3>2 · Reactive check</h3><p>FlashGuardReactive receives the log via the system contract and checks every stop-loss order for that asset.</p><span class="chain">Reactive Lasna · 5318007</span></div>
+  <div class="arrow">→</div>
+  <div class="step"><h3>3 · Callback exit</h3><p>On breach, a callback exits the full position into mUSDC at the trigger price — and records the loop latency on-chain.</p><span class="chain">Base Sepolia · 84532</span></div>
+</div>
+
+<div class="grid">
+  <div class="card"><div class="label">Latest price (mETH)</div><div class="value" id="price">—</div><div class="note" id="priceTs">PriceFeed · Unichain Sepolia</div></div>
+  <div class="card"><div class="label">Stop-loss triggers</div><div class="value" id="triggers">—</div><div class="note" id="orders">orders: — · FlashGuardReactive · Lasna</div></div>
+  <div class="card"><div class="label">Last full-loop latency</div><div class="value big" id="latency">—</div><div class="note">Origin event → callback execution, measured on-chain (seconds).</div></div>
+  <div class="card"><div class="label">Average loop latency</div><div class="value" id="avgLatency">—</div><div class="note" id="exits">exits: — · ProtectedVault · Base Sepolia</div></div>
+  <div class="card"><div class="label">Total protected (mETH)</div><div class="value" id="deposited">—</div><div class="note" id="exited">exited: —</div></div>
+  <div class="card"><div class="label">Contracts</div><div class="value small" id="addrs">not deployed yet</div><div class="note">Set addresses below or serve with <code>deployments/testnet.json</code> next to this page.</div></div>
+</div>
+
+<section>
+  <h2>Live data</h2>
+  <p>This page reads directly from public testnet RPCs — no backend, no wallet needed.
+  Paste the deployed addresses (or load <code>deployments/testnet.json</code>) and press Refresh.</p>
+  <div class="addr-form">
+    <input id="inFeed" placeholder="PriceFeed (Unichain Sepolia)">
+    <input id="inReactive" placeholder="FlashGuardReactive (Lasna)">
+    <input id="inVault" placeholder="ProtectedVault (Base Sepolia)">
+    <button id="refreshBtn">Refresh</button>
+  </div>
+  <div id="status"></div>
+</section>
+
+<section>
+  <h2>Why this wins the track</h2>
+  <ul>
+    <li><b>Execution is the whole product:</b> every exit is a real reactive transaction plus a real cross-chain callback, visible on three explorers.</li>
+    <li><b>Latency is measured, not claimed:</b> the vault records full-loop latency on-chain (origin timestamp → callback block), and <code>scripts/measure_latency.js</code> cross-checks it from receipts.</li>
+    <li><b>Reactive does the real work:</b> threshold evaluation, trigger dedup, and the callback decision all live in the reactive contract — the vault only executes authenticated callbacks.</li>
+    <li><b>Honest scope:</b> a demo price feed (documented as such) with a production path to Chainlink/TWAP; mock tokens on testnet only.</li>
+  </ul>
+</section>
+
+<footer>
+  FlashGuard · Reactive Omni Buildathon · Track: Every Second Counts ·
+  <a href="https://github.com/darendrarp/flashguard-reactive-omni">GitHub</a> ·
+  <a href="https://dorahacks.io/hackathon/reactive-omni-buildathon">DoraHacks page</a> ·
+  Testnets only — no mainnet, no real funds.
+</footer>
+
+<script>
+const RPC = {
+  uni: "https://sepolia.unichain.org",
+  lasna: "https://lasna-rpc.rnk.dev/",
+  base: "https://sepolia.base.org",
+};
+const SEL = {
+  getPrice: "0xe7572230",
+  triggersCount: "0xa4eb7395",
+  orderCount: "0x2453ffa8",
+  exitCount: "0xbb4c31ed",
+  lastLatency: "0xaa933629",
+  avgLatency: "0xd9654b9b",
+  totalDeposited: "0xff50abdc",
+  totalExited: "0x91994b2c",
+};
+const $ = (id) => document.getElementById(id);
+
+async function ethCall(rpc, to, data) {
+  const res = await fetch(rpc, { method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }) });
+  const j = await res.json();
+  if (j.error) throw new Error(j.error.message || JSON.stringify(j.error));
+  return j.result;
+}
+const u256 = (hex, i = 0) => BigInt("0x" + hex.slice(2 + i * 64, 2 + (i + 1) * 64));
+const fmtEth = (v) => (Number(v) / 1e18).toFixed(4);
+
+async function refresh() {
+  const feed = $("inFeed").value.trim();
+  const reactive = $("inReactive").value.trim();
+  const vault = $("inVault").value.trim();
+  $("status").textContent = "Reading testnets…";
+  try {
+    if (feed) {
+      const r = await ethCall(RPC.uni, feed, SEL.getPrice + "0000000000000000000000000000000000000000000000000000000000000001");
+      const price = u256(r, 0), ts = u256(r, 1);
+      $("price").textContent = "$" + (Number(price) / 1e8).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      $("priceTs").textContent = "as of " + new Date(Number(ts) * 1000).toLocaleString();
+    }
+    if (reactive) {
+      const t = await ethCall(RPC.lasna, reactive, SEL.triggersCount);
+      const o = await ethCall(RPC.lasna, reactive, SEL.orderCount);
+      $("triggers").textContent = u256(t).toString();
+      $("orders").textContent = "orders: " + u256(o).toString() + " · FlashGuardReactive · Lasna";
+    }
+    if (vault) {
+      const last = await ethCall(RPC.base, vault, SEL.lastLatency);
+      const avg = await ethCall(RPC.base, vault, SEL.avgLatency);
+      const exits = await ethCall(RPC.base, vault, SEL.exitCount);
+      const dep = await ethCall(RPC.base, vault, SEL.totalDeposited);
+      const ex = await ethCall(RPC.base, vault, SEL.totalExited);
+      $("latency").textContent = u256(last).toString() + "s";
+      $("avgLatency").textContent = u256(avg).toString() + "s";
+      $("exits").textContent = "exits: " + u256(exits).toString() + " · ProtectedVault · Base Sepolia";
+      $("deposited").textContent = fmtEth(u256(dep)) + " mETH";
+      $("exited").textContent = "exited: " + fmtEth(u256(ex)) + " mETH";
+    }
+    $("addrs").textContent = [feed, reactive, vault].filter(Boolean).join("\n") || "not deployed yet";
+    $("status").textContent = "Updated " + new Date().toLocaleTimeString() + " — live from public testnet RPCs.";
+  } catch (e) {
+    $("status").textContent = "Read failed: " + e.message;
+  }
+}
+
+// Try to auto-load deployments/testnet.json when served from the repo.
+fetch("deployments/testnet.json").then(r => r.json()).then(d => {
+  $("inFeed").value = d.priceFeed_unichainSepolia || "";
+  $("inReactive").value = d.reactive_lasna || "";
+  $("inVault").value = d.vault_baseSepolia || "";
+  if (d.priceFeed_unichainSepolia) refresh();
+}).catch(() => {});
+
+$("refreshBtn").addEventListener("click", refresh);
+setInterval(() => { if ($("inVault").value.trim()) refresh(); }, 30000);
+</script>
+</body>
+</html>
